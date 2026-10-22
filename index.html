@@ -1,0 +1,547 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Claude HMI</title>
+<style>
+  :root { --bg:#0e1014; --card:#171a21; --card2:#1f232c; --ink:#eceef3; --muted:#8d95a8; --line:#2a2f3a;
+          --accent:#d97757; --accent-ink:#1d0f09; --ok:#4fbf8b; --bad:#ff6b6b; --warn:#f2b84b; --warn-ink:#241a00;
+          --safe-b:env(safe-area-inset-bottom, 0px); --safe-t:env(safe-area-inset-top, 0px); }
+  * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:16px/1.45 -apple-system, system-ui, "Segoe UI", sans-serif;
+         padding:calc(12px + var(--safe-t)) 16px calc(28px + var(--safe-b)); }
+  h1 { font-size:18px; margin:0; display:flex; align-items:center; gap:8px; }
+  h1 i { width:11px; height:11px; border-radius:3px; background:var(--accent); transform:rotate(45deg); flex:none; }
+  .sub { color:var(--muted); font-size:13px; margin:4px 0 14px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:16px; padding:14px; margin-bottom:12px; }
+  label { display:block; font-size:11.5px; color:var(--muted); margin:10px 0 5px; text-transform:uppercase; letter-spacing:.6px; font-weight:600; }
+  label:first-child { margin-top:0; }
+  input, select, textarea { width:100%; background:var(--bg); color:var(--ink); border:1px solid var(--line); border-radius:11px; padding:12px; font-size:16px; font-family:inherit; }
+  textarea { resize:none; }
+  input:focus, select:focus, textarea:focus { outline:none; border-color:var(--accent); }
+  button { border:0; border-radius:12px; padding:11px 14px; min-height:48px; font-weight:650; font-size:15px; font-family:inherit;
+           background:var(--accent); color:var(--accent-ink); cursor:pointer; display:inline-flex; align-items:center; justify-content:center; gap:7px; }
+  button:active { filter:brightness(1.08); }
+  [hidden] { display:none !important; }
+  button.alt { background:var(--card2); color:var(--ink); border:1px solid var(--line); }
+  button:disabled { opacity:.4; }
+  /* row children shrink by default so they never overflow the viewport */
+  .row { display:flex; gap:8px; align-items:stretch; }
+  .row > * { flex:1 1 0; min-width:0; }
+  .icon-btn { flex:0 0 52px; padding:0; font-size:20px; }
+  .seg { display:flex; gap:4px; background:var(--bg); border:1px solid var(--line); border-radius:12px; padding:4px; }
+  .seg button { flex:1 1 0; min-width:0; min-height:40px; border-radius:9px; font-size:14px; font-weight:650; background:transparent; color:var(--muted); }
+  .seg button[aria-checked="true"] { background:var(--card2); color:var(--ink); }
+  .seg button.warnsel[aria-checked="true"] { background:var(--warn); color:var(--warn-ink); }
+  .pill { display:inline-flex; align-items:center; gap:7px; padding:5px 11px; border-radius:99px; font-size:12.5px; font-weight:600; background:var(--card2); border:1px solid var(--line); color:var(--muted); max-width:56vw; }
+  .pill .t { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .pill .dot { width:8px; height:8px; border-radius:50%; background:var(--muted); flex:none; }
+  .pill.ok { border-color:#1f5a41; color:var(--ok); } .pill.ok .dot { background:var(--ok); box-shadow:0 0 0 3px #4fbf8b33; }
+  .pill.bad { border-color:#5a2020; color:var(--bad); } .pill.bad .dot { background:var(--bad); }
+  .pill.busy .dot { background:var(--warn); animation:pulse 1s infinite; }
+  @keyframes pulse { 50% { opacity:.3; } }
+  .head { display:flex; align-items:flex-start; justify-content:space-between; gap:10px; margin-bottom:14px; }
+  pre { margin:8px 0 0; padding:10px; background:var(--bg); border:1px solid var(--line); border-radius:10px; font:12.5px/1.6 ui-monospace, Menlo, monospace; white-space:pre-wrap; word-break:break-word; }
+  .who { font-size:10.5px; text-transform:uppercase; letter-spacing:.6px; color:var(--muted); margin-bottom:4px; font-weight:700; }
+  .chathead { display:flex; gap:8px; align-items:center; margin-bottom:10px; }
+  .chathead .seg { flex:1 1 0; min-width:0; }
+  .conv { display:flex; flex-direction:column; gap:10px; max-height:52vh; overflow-y:auto; -webkit-overflow-scrolling:touch; }
+  .conv:empty { display:none; }
+  .empty { color:var(--muted); font-size:13px; line-height:1.55; padding:4px 2px 8px; }
+  .msg { border:1px solid var(--line); border-radius:14px; padding:10px 12px; background:var(--card2); white-space:pre-wrap; max-width:90%; align-self:flex-start; }
+  .msg.you { align-self:flex-end; background:var(--accent); color:var(--accent-ink); border-color:transparent; }
+  .msg.you .who { color:var(--accent-ink); opacity:.7; }
+  .composer { display:flex; gap:8px; align-items:flex-end; margin-top:12px; }
+  .composer textarea { flex:1 1 0; min-width:0; }
+  .send { background:var(--accent); color:var(--accent-ink); font-size:18px; }
+  .play { width:100%; margin-top:10px; }
+  .note { color:var(--muted); font-size:12.5px; line-height:1.5; }
+  .msg img { display:block; max-width:100%; border-radius:10px; margin-top:4px; }
+  .stopbtn { width:100%; margin-top:10px; background:var(--bad); color:#fff; }
+  .editarea { width:100%; margin-top:8px; font:12.5px/1.6 ui-monospace, Menlo, monospace; min-height:92px; }
+  .ministep { display:flex; gap:6px; flex-wrap:wrap; margin-top:8px; }
+  .ministep button { min-height:40px; padding:8px 12px; font-size:13.5px; }
+  .recdrawer { margin-top:12px; border-top:1px solid var(--line); padding-top:10px; }
+  .recdrawer summary { justify-content:space-between; }
+  .recrow { display:flex; align-items:center; gap:8px; padding:8px; margin-top:8px; background:var(--bg); border:1px solid var(--line); border-radius:11px; }
+  .recrow .rn { flex:1 1 0; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-weight:600; font-size:14px; }
+  .recrow button { min-height:40px; flex:0 0 auto; padding:8px 12px; font-size:14px; }
+  details summary { cursor:pointer; color:var(--muted); font-size:14px; font-weight:600; padding:4px 0; list-style:none; display:flex; align-items:center; gap:7px; }
+  details summary::-webkit-details-marker { display:none; }
+  details summary::before { content:"⚙"; font-size:15px; }
+  details[open] summary { margin-bottom:6px; }
+</style>
+</head>
+<body>
+<div class="head">
+  <div>
+    <h1><i></i>Claude HMI</h1>
+    <div class="sub" style="margin-bottom:0">Phone &rarr; Claude &rarr; Flipper &rarr; target keyboard. No PC.</div>
+  </div>
+  <span id="bleState" class="pill"><span class="dot"></span><span class="t">not connected</span></span>
+</div>
+
+<div class="card">
+  <button id="bconnect" style="width:100%">Connect Flipper</button>
+  <button id="bdisconnect" class="alt" style="width:100%" hidden>Disconnect Flipper</button>
+  <div id="bnote" class="note" style="margin-top:10px">Open <b>Android KB Bridge</b> on the Flipper first, then tap Connect. Needs Bluefy on iPhone (Safari has no Web Bluetooth) or Chrome on Android.</div>
+</div>
+
+<div class="card">
+  <div class="chathead">
+    <div class="seg" id="modeseg" role="radiogroup" aria-label="Run mode">
+      <button type="button" data-m="approve" role="radio" aria-checked="true">Approve</button>
+      <button type="button" data-m="auto" class="warnsel" role="radio" aria-checked="false">Auto</button>
+    </div>
+    <button id="newchat" class="alt icon-btn" title="New chat" aria-label="New chat">✕</button>
+  </div>
+  <div id="empty" class="empty">Chat with Claude, or ask it to do something on the target. It replies here; only the keystrokes it proposes reach the keyboard, and only when you tap <b>▶ Send</b>. Tap 📷 to show Claude the target's screen.</div>
+  <div id="conv" class="conv"></div>
+  <button id="stop" class="stopbtn" hidden>■ Stop sending</button>
+  <div class="composer">
+    <textarea id="goal" rows="1" placeholder="Message Claude…"></textarea>
+    <button id="cam" class="alt icon-btn" title="Show Claude the screen" aria-label="Camera">📷</button>
+    <button id="mic" class="alt icon-btn" title="Hold to talk" aria-label="Hold to talk">🎤</button>
+    <button id="ask" class="icon-btn send" aria-label="Send" title="Send">➤</button>
+  </div>
+  <input id="camfile" type="file" accept="image/*" capture="environment" hidden>
+  <details id="recipebox" class="recdrawer">
+    <summary><span>Recipes</span><span id="reccount" class="note"></span></summary>
+    <div id="reclist"></div>
+    <div class="note" style="margin-top:6px">Save the last command Claude proposed as a reusable recipe for this target.</div>
+  </details>
+</div>
+
+<div class="card">
+  <details>
+    <summary>Settings</summary>
+    <label for="key">Anthropic API key (stored only in this browser)</label>
+    <input id="key" type="password" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="sk-ant-...">
+    <label for="model">Model</label>
+    <input id="model" value="claude-haiku-5-5" autocapitalize="off" spellcheck="false">
+    <label for="target">Target computer</label>
+    <select id="target">
+      <option value="windows">Windows</option>
+      <option value="winre">Windows recovery (WinRE cmd)</option>
+      <option value="mac">macOS</option>
+      <option value="linux">Linux</option>
+    </select>
+    <label for="autowait">Auto mode</label>
+    <select id="autowait"><option value="0">Runs each reply on arrival (hands-free)</option><option value="1">Waits for my ▶ tap, then runs + Enter</option></select>
+    <label for="dry">Dry run (no Flipper: show frames, send nothing)</label>
+    <select id="dry"><option value="0">Off</option><option value="1">On</option></select>
+    <div class="row" style="margin-top:10px"><button id="save" class="alt">Save settings</button><button id="forget" class="alt">Forget key</button></div>
+    <p class="note">The key is sent only to api.anthropic.com. Set a spend limit on it in the Anthropic console, because anyone with access to this phone's browser data could read it.</p>
+  </details>
+</div>
+
+<script>
+// ==CORE== (pure logic: no DOM, tested in node against flipper_kb.py)
+const KEY_DOWN = 1, KEY_UP = 2, SHIFT = 2;
+const MODS = { ctrl: 1, shift: 2, alt: 4, win: 8, gui: 8, cmd: 8, meta: 8, super: 8, rctrl: 16, rshift: 32, ralt: 64, altgr: 64, rwin: 128 };
+const US = {};
+"abcdefghijklmnopqrstuvwxyz".split("").forEach((c, i) => { US[c] = [0, 4 + i]; US[c.toUpperCase()] = [SHIFT, 4 + i]; });
+"1234567890".split("").forEach((c, i) => { US[c] = [0, 0x1E + i]; US["!@#$%^&*()"[i]] = [SHIFT, 0x1E + i]; });
+[[0x2D, "-", "_"], [0x2E, "=", "+"], [0x2F, "[", "{"], [0x30, "]", "}"], [0x31, "\\", "|"], [0x33, ";", ":"],
+ [0x34, "'", '"'], [0x35, "`", "~"], [0x36, ",", "<"], [0x37, ".", ">"], [0x38, "/", "?"]]
+  .forEach(([code, a, b]) => { US[a] = [0, code]; US[b] = [SHIFT, code]; });
+US[" "] = [0, 0x2C];
+const NAMED = { enter: 0x28, return: 0x28, esc: 0x29, escape: 0x29, backspace: 0x2A, tab: 0x2B, space: 0x2C, capslock: 0x39,
+  printscreen: 0x46, home: 0x4A, pageup: 0x4B, delete: 0x4C, del: 0x4C, end: 0x4D, pagedown: 0x4E,
+  right: 0x4F, left: 0x50, down: 0x51, up: 0x52, menu: 0x65 };
+for (let n = 1; n <= 12; n++) NAMED["f" + n] = 0x3A + n - 1;
+const FOLD = { "“": '"', "”": '"', "‘": "'", "’": "'", "–": "-", "—": "-", " ": " " };
+
+function frame(event, mods, code) { return [0xFB, 0x4B, 0x03, event, mods, code]; }
+// Typed text never contains Enter: newlines are rejected, not typed.
+function encodeText(text) {
+  text = text.split("").map(c => FOLD[c] || c).join("");
+  const out = [], bad = [];
+  for (const ch of text) {
+    if (US[ch]) out.push(US[ch]); else bad.push(ch === "\n" ? "newline" : JSON.stringify(ch));
+  }
+  if (bad.length) throw new Error("refusing to type, nothing sent. No US-keyboard key for: " + bad.slice(0, 8).join(" "));
+  return out;
+}
+function encodeCombo(combo) {
+  const parts = combo.split("+").map(p => p.trim().toLowerCase()).filter(Boolean);
+  if (!parts.length) throw new Error("empty key combo");
+  let mods = 0;
+  for (const p of parts.slice(0, -1)) { if (!(p in MODS)) throw new Error("unknown modifier " + p); mods |= MODS[p]; }
+  const last = parts[parts.length - 1];
+  if (last in NAMED) return [mods, NAMED[last]];
+  if (last.length === 1 && US[last]) return [mods | US[last][0], US[last][1]];
+  if (last in MODS) return [mods | MODS[last], 0];   // bare modifier tap, e.g. "gui" for the Start / Super key
+  throw new Error("unknown key " + last);
+}
+const ENTER_RE = /^(enter|return|kp_enter|kpenter|num_enter)$/;
+// Clean a raw step array into {key|type|wait} objects. Enter steps are dropped
+// unless allowEnter, so the model never presses Enter on its own. Returns {steps, dropped}.
+function normalizeSteps(raw, allowEnter) {
+  let dropped = 0;
+  const steps = (raw || []).map(s => {
+    if (!s || typeof s !== "object") return null;
+    if (s.key != null) return { key: String(s.key).toLowerCase().trim() };
+    if (s.type != null) return { type: String(s.type).replace(/\r?\n+/g, " ") };
+    if (s.wait != null) return { wait: Math.max(0, Math.min(4000, parseInt(s.wait) || 0)) };
+    return null;
+  }).filter(Boolean).filter(s => { if (!allowEnter && s.key && ENTER_RE.test(s.key.split("+").pop())) { dropped++; return false; } return true; });
+  return { steps, dropped };
+}
+function parseReply(content, allowEnter) {
+  let obj = null;
+  try { obj = JSON.parse(content); } catch (e) { const m = content.match(/\{[\s\S]*\}/); if (m) { try { obj = JSON.parse(m[0]); } catch (_) {} } }
+  if (!obj) return { say: content.trim(), steps: [], dropped: 0 };
+  const raw = Array.isArray(obj.steps) ? obj.steps : obj.type ? [{ type: obj.type }] : [];
+  const { steps, dropped } = normalizeSteps(raw, allowEnter);
+  return { say: obj.say || "", steps, dropped };
+}
+// One step per line: "key <combo>", "wait <ms>", or "type <text>". For the editor.
+function stepsToText(steps) {
+  return steps.map(s => s.wait != null ? "wait " + s.wait : s.key != null ? "key " + s.key : "type " + s.type).join("\n");
+}
+function textToSteps(text, allowEnter) {
+  const raw = text.split("\n").map(l => l.trim()).filter(Boolean).map(l => {
+    const sp = l.indexOf(" "); const verb = (sp < 0 ? l : l.slice(0, sp)).toLowerCase(); const rest = sp < 0 ? "" : l.slice(sp + 1);
+    if (verb === "key") return { key: rest };
+    if (verb === "wait") return { wait: parseInt(rest) || 0 };
+    if (verb === "type") return { type: rest };
+    return { type: l };   // a bare line is treated as text to type
+  });
+  const { steps } = normalizeSteps(raw, allowEnter);
+  // validate key combos now so a typo is caught before sending
+  steps.forEach(s => { if (s.key != null) encodeCombo(s.key); });
+  return steps;
+}
+// ==/CORE==
+
+const PLAYBOOK = {
+  windows: "Windows 10/11 with a normal desktop. Run dialog: win+r, then type a target (cmd, powershell, regedit, devmgmt.msc, diskmgmt.msc, services.msc, control, appwiz.cpl, ncpa.cpl, taskmgr, msconfig, eventvwr, msinfo32). Start menu: key ctrl+esc, then type. win+x power-user menu, ctrl+shift+esc Task Manager, win+e Explorer, win+i Settings.",
+  winre: "Windows Recovery Environment command prompt only: no Run dialog, no Start menu. Tools: cmd, diskpart, bcdedit, bootrec, DISM, sfc, reg, notepad, regedit. Drive letters are often shifted (the OS is frequently D:).",
+  mac: "macOS. gui means Cmd. Spotlight: gui+space, wait 1200, then type an app name such as Terminal. Safari address bar: gui+l.",
+  linux: "Linux desktop or TTY. GNOME: key gui, then type an app such as terminal. KDE run dialog: alt+f2. TTY: ctrl+alt+f3.",
+};
+function sysPrompt(target) {
+  return [
+    "You are Claude, in an ongoing chat with Rob. He holds a phone that types into a target computer through a Flipper Zero acting as a USB keyboard. You can only press keys and type — no mouse. Normally you cannot see the target's screen, BUT Rob can send a photo of it; when he does, read it and use what you see to confirm state, recover from a wrong step, or plan the next keystrokes. This is a conversation: remember what was said and take follow-ups.",
+    "TARGET: " + (PLAYBOOK[target] || target),
+    "",
+    'Reply ONLY as compact JSON: {"say":"<your message to Rob>","steps":[ ... ]}.',
+    "- say: talk to Rob like a chat — answer his question, say what you'll do, or ask a short clarifying question. This is shown in the chat and is NEVER typed into the target.",
+    "- steps: the keystrokes that carry out the request, or [] when you are only talking. ONLY steps reach the keyboard, and only when Rob taps the play button — so never put anything in say that needs to be typed.",
+    'Each step is exactly ONE of: {"key":"<combo>"} (lowercase, + between keys, e.g. "win+r", "ctrl+shift+esc", "gui+space", "alt+tab", "f8"), {"type":"<text>"} (typed literally, US keyboard, ASCII only), or {"wait":<ms>} (600-1500 after opening something).',
+    "If the request is unclear or risky, return [] steps and ask or warn in say instead of guessing.",
+    ...(auto ? [
+      'AUTO MODE: Rob wants the WHOLE request done in one reply. Plan every stage and chain them all. Press Enter with {"key":"enter"} wherever a stage needs it (to launch from Run/Spotlight/search, to run a typed command). Put a {"wait":1000} (more for slow apps) after every launch before typing into the new window. Do NOT stop after the first stage. Do not press Enter after text typed into an editor unless asked for a new line. Never put a newline inside a type string.',
+      'Example, "open command line, wait a second, open notepad, after a second write xyz": {"say":"Opening cmd, then Notepad, then typing xyz.","steps":[{"key":"win+r"},{"wait":800},{"type":"cmd"},{"key":"enter"},{"wait":1500},{"type":"notepad"},{"key":"enter"},{"wait":1500},{"type":"xyz"}]}.',
+      "You may use up to 40 steps.",
+    ] : [
+      "NEVER put Enter/Return or a newline in steps. End the sequence where Rob must press Enter: he reads the screen and presses it himself.",
+      'Example, "open device manager": {"say":"Opening Device Manager via Run; press Enter to launch.","steps":[{"key":"win+r"},{"wait":800},{"type":"devmgmt.msc"}]}.',
+      "One goal per turn.",
+    ]),
+    "Warn in say before anything destructive (del, format, diskpart clean/delete, reg delete, bcdedit /delete, dism /remove) and suggest a backup. Keep say under 200 characters.",
+  ].join("\n");
+}
+
+// ---------- UI ----------
+const $ = id => document.getElementById(id);
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+const SVC = "8fe5b3d5-2e7f-4a98-2a48-7acc60fe0000", TXC = "19ed82ae-ed21-4c9d-4145-228e62fe0000";
+const HOLD = 40, GAP = 40, BURST = 8, PAUSE = 250;
+let bleDev = null, tx = null, hist = [], busy = false, abort = false;
+
+const store = {
+  get(k, d) { try { return localStorage.getItem(k) ?? d; } catch { return d; } },
+  set(k, v) { try { localStorage.setItem(k, v); } catch {} },
+  del(k) { try { localStorage.removeItem(k); } catch {} },
+};
+$("key").value = store.get("hmi_key", ""); $("model").value = store.get("hmi_model", "claude-haiku-5-5");
+$("target").value = store.get("hmi_target", "windows"); $("dry").value = store.get("hmi_dry", "0");
+$("autowait").value = store.get("hmi_autowait", "0");
+$("target").onchange = () => { store.set("hmi_target", $("target").value); renderRecipes(); };
+$("save").onclick = () => { store.set("hmi_key", $("key").value.trim()); store.set("hmi_model", $("model").value.trim()); store.set("hmi_target", $("target").value); store.set("hmi_dry", $("dry").value); store.set("hmi_autowait", $("autowait").value); renderRecipes(); bnote("Settings saved."); };
+const autowait = () => $("autowait").value === "1";
+$("forget").onclick = () => { store.del("hmi_key"); $("key").value = ""; bnote("Key removed from this browser."); };
+
+function bnote(t, bad) { $("bnote").textContent = t; $("bnote").style.color = bad ? "var(--bad)" : "var(--muted)"; }
+function bleState(t, ok) { const e = $("bleState"); e.querySelector(".t").textContent = t; e.className = "pill" + (ok ? " ok" : (t === "not connected" ? "" : " bad")); }
+const dry = () => $("dry").value === "1";
+
+// ---- BLE ----
+async function attach() {
+  const server = await bleDev.gatt.connect();
+  const svc = await server.getPrimaryService(SVC);
+  tx = await svc.getCharacteristic(TXC);
+  bleState(bleDev.name || "connected", true);
+  $("bconnect").hidden = true; $("bdisconnect").hidden = false;
+  bnote("Linked. Watch the Flipper's Frames counter rise when keys are sent. Keep this page in front: iOS drops the link in the background.");
+  try { if (navigator.wakeLock) await navigator.wakeLock.request("screen"); } catch {}
+}
+$("bconnect").onclick = async () => {
+  if (!navigator.bluetooth) { bnote("This browser has no Web Bluetooth. Use Bluefy on iPhone.", true); return; }
+  try {
+    bleDev = await navigator.bluetooth.requestDevice({ filters: [{ namePrefix: "Flipper" }], optionalServices: [SVC] });
+    bleDev.addEventListener("gattserverdisconnected", () => { tx = null; bleState("disconnected", false); $("bconnect").hidden = false; $("bdisconnect").hidden = true; bnote("Link dropped. Reopen KB Bridge on the Flipper, then Connect.", true); });
+    bnote("Connecting…"); await attach();
+  } catch (e) { tx = null; bnote("Couldn't connect: " + e.message, true); }
+};
+$("bdisconnect").onclick = () => { const d = bleDev; bleDev = null; tx = null; if (d && d.gatt.connected) d.gatt.disconnect(); };
+
+// Frames are written WITHOUT response; write-with-response makes the app drop keys.
+async function write(f) {
+  if (dry()) { lastFrames.push(f.map(b => b.toString(16).padStart(2, "0")).join(" ")); return; }
+  if (!tx) throw new Error("Flipper not connected");
+  if (!tx.writeValueWithoutResponse) throw new Error("browser can't write without response");
+  await tx.writeValueWithoutResponse(new Uint8Array(f));
+}
+let lastFrames = [];
+async function tap(mods, code) {
+  await write(frame(KEY_DOWN, mods, code)); await sleep(HOLD);
+  await write(frame(KEY_UP, mods, code)); await sleep(GAP);
+}
+async function typeText(text) {
+  const evs = encodeText(text);                      // validates everything before sending anything
+  for (let i = 0; i < evs.length; i++) {
+    if (abort) throw new Error("Stopped mid-type — clear the half-typed line before retrying.");
+    await tap(evs[i][0], evs[i][1]); if (BURST && (i + 1) % BURST === 0) await sleep(PAUSE);
+  }
+}
+async function pressKey(combo) { const [m, c] = encodeCombo(combo); await tap(m, c); }
+
+// ---- Claude, called directly from the page ----
+async function askClaude(userText, imageDataUrl) {
+  const key = store.get("hmi_key", "") || $("key").value.trim();
+  if (!key) throw new Error("Add your Anthropic API key under Settings first.");
+  let content = userText;
+  if (imageDataUrl) {
+    const comma = imageDataUrl.indexOf(","), meta = imageDataUrl.slice(0, comma);
+    const mt = (meta.match(/data:(.*?);/) || [])[1] || "image/jpeg";
+    content = [{ type: "image", source: { type: "base64", media_type: mt, data: imageDataUrl.slice(comma + 1) } },
+               { type: "text", text: userText || "Here is the target's screen. What's the next step?" }];
+  }
+  hist.push({ role: "user", content });
+  // Send only the last 10 turns, and strip image bytes from all but the newest
+  // message so old screenshots don't re-upload (and re-bill) on every turn.
+  const win = hist.slice(-10);
+  const outgoing = win.map((m, i) => (i < win.length - 1 && Array.isArray(m.content))
+    ? { role: m.role, content: m.content.map(b => b.type === "image" ? { type: "text", text: "[earlier screenshot]" } : b) }
+    : m);
+  const r = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: { "content-type": "application/json", "x-api-key": key, "anthropic-version": "2023-06-01", "anthropic-dangerous-direct-browser-access": "true" },
+    body: JSON.stringify({ model: $("model").value.trim() || "claude-haiku-5-5", max_tokens: 1500, system: sysPrompt($("target").value), messages: outgoing }),
+  });
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) { hist.pop(); throw new Error((data.error && data.error.message) || ("HTTP " + r.status)); }
+  const text = (data.content || []).filter(b => b.type === "text").map(b => b.text).join("");
+  hist.push({ role: "assistant", content: text });
+  return text;
+}
+
+// ---- conversation UI ----
+function msg(who, text, color) {
+  $("empty").hidden = true;
+  const mine = who === "you";
+  const d = document.createElement("div"); d.className = "msg" + (mine ? " you" : "");
+  const h = document.createElement("div"); h.className = "who"; h.textContent = mine ? "you" : who; if (color) h.style.color = color;
+  const t = document.createElement("div"); t.textContent = text;
+  d.append(h, t); $("conv").appendChild(d); d.scrollIntoView({ block: "nearest" }); return d;
+}
+function clearChat() { hist = []; $("conv").innerHTML = ""; $("empty").hidden = false; bnote("New chat started. Earlier messages won't be sent as context."); }
+function describe(s) { return s.wait != null ? "wait   " + s.wait + " ms" : s.key != null ? "press  " + s.key : "type   " + s.type; }
+let auto = store.get("hmi_auto", "0") === "1";
+function showMode() { document.querySelectorAll("#modeseg button").forEach(b => b.setAttribute("aria-checked", (b.dataset.m === "auto") === auto ? "true" : "false")); }
+function setMode(v, announce) { auto = v; store.set("hmi_auto", auto ? "1" : "0"); showMode(); if (announce) bnote(auto ? "AUTO: runs the steps and presses Enter by itself. A wrong command runs with no check." : "Approve: it types the steps, then you press Enter."); }
+document.querySelectorAll("#modeseg button").forEach(b => b.onclick = () => setMode(b.dataset.m === "auto", true));
+showMode();
+// Auto never presses Enter on something that can destroy data; those fall back to Approve.
+const DANGER = /(^|[\s;&|])(del|erase|rmdir|rd|rm|format|diskpart|bcdedit|bootrec|dism|fdisk|mkfs|dd|shutdown|cipher|takeown|icacls|sudo|chmod|chown|mv)(\s|$)|reg\s+(delete|add|import)|\bclean\b/i;
+function btn(label, cls) { const b = document.createElement("button"); b.textContent = label; if (cls) b.className = cls; return b; }
+function note(parent, text, color) { const n = document.createElement("div"); n.className = "note"; n.style.marginTop = "6px"; if (color) n.style.color = color; n.textContent = text; parent.appendChild(n); return n; }
+function dryMsg() { return "Dry run: " + lastFrames.length + " frames built, none sent."; }
+function showStop(on) { const s = $("stop"); s.hidden = !on; if (on) s.textContent = "■ Stop sending"; }
+$("stop").onclick = () => { abort = true; $("stop").textContent = "Stopping…"; };
+
+function proposal(p) {
+  const d = msg("Claude", p.say || "(no message)", "var(--accent)");
+  if (p.dropped) note(d, p.dropped + " Enter step(s) from the model were removed. Enter is always your tap.");
+  if (p.steps.length) renderStepCard(d, p.steps);
+}
+// A command card: preview + ▶ Send (replayable) + ⏎ Enter + ✎ Edit + 💾 Save.
+// Used both for Claude's proposals and for loading a saved recipe.
+function renderStepCard(bubble, steps0) {
+  let steps = steps0;
+  const box = document.createElement("div"); bubble.appendChild(box);
+  draw();
+  function draw() {
+    box.innerHTML = "";
+    let cut = false;
+    if (auto) { const i = steps.findIndex(x => x.type != null && DANGER.test(x.type)); if (i >= 0 && i < steps.length - 1) { steps = steps.slice(0, i + 1); cut = true; } }
+    const pre = document.createElement("pre"); pre.textContent = steps.map(describe).join("\n"); box.appendChild(pre);
+    const endsTyping = steps[steps.length - 1].type != null;
+    const danger = DANGER.test(steps.filter(x => x.type != null).map(x => x.type).join(" "));
+    const hasEnter = steps.some(x => x.key && ENTER_RE.test(x.key.split("+").pop()));
+    const willAuto = auto && endsTyping && !danger && !hasEnter;   // supply the single final Enter
+    const runNow = auto && !autowait() && !danger;
+    const row = document.createElement("div"); row.className = "row"; row.style.flexWrap = "wrap"; row.style.marginTop = "10px";
+    const run = btn("▶ Send to device"); run.style.flex = "2 1 0";
+    const ent = btn("⏎ Enter", "alt"); ent.disabled = true;
+    row.append(run, ent); box.appendChild(row);
+    const mini = document.createElement("div"); mini.className = "ministep";
+    const edit = btn("✎ Edit", "alt"), saveR = btn("💾 Save", "alt");
+    mini.append(edit, saveR); box.appendChild(mini);
+    const tag = note(box, "", null);
+    if (cut) note(box, "Auto stopped the chain at a destructive-looking command.", "var(--warn)");
+    if (auto && danger) note(box, "Looks destructive, so this won't auto-run: send it, check the screen, then tap Enter.", "var(--warn)");
+
+    run.onclick = async () => {
+      run.disabled = true; ent.disabled = true; lastFrames = []; abort = false; showStop(true);
+      try {
+        for (const s of steps) {
+          if (abort) throw new Error("Stopped — the line may be half-typed, clear it before retrying.");
+          if (s.wait != null) await sleep(s.wait);
+          else if (s.key != null) { tag.textContent = "press " + s.key + "…"; tag.style.color = "var(--muted)"; await pressKey(s.key); }
+          else { tag.textContent = "typing…"; tag.style.color = "var(--muted)"; await typeText(s.type); }
+        }
+        if (willAuto) { if (abort) throw new Error("Stopped before Enter."); await sleep(300); await pressKey("enter"); tag.textContent = dry() ? dryMsg() : "Done + Enter sent (auto)."; tag.style.color = "var(--ok)"; }
+        else { tag.textContent = dry() ? dryMsg() : (endsTyping ? "Sent. Check the screen, then tap Enter." : "Sent."); tag.style.color = "var(--ok)"; ent.disabled = false; }
+      } catch (e) { tag.textContent = e.message; tag.style.color = "var(--bad)"; }
+      finally { showStop(false); run.disabled = false; run.textContent = "▶ Send again"; }
+    };
+    ent.onclick = async () => {
+      ent.disabled = true;
+      try { await pressKey("enter"); tag.textContent = "Enter sent."; tag.style.color = "var(--ok)"; } catch (e) { tag.textContent = e.message; tag.style.color = "var(--bad)"; ent.disabled = false; }
+    };
+    edit.onclick = () => {
+      box.innerHTML = "";
+      const ta = document.createElement("textarea"); ta.className = "editarea"; ta.value = stepsToText(steps);
+      const r2 = document.createElement("div"); r2.className = "ministep";
+      const apply = btn("Apply"), cancel = btn("Cancel", "alt");
+      r2.append(apply, cancel); box.append(ta, r2);
+      const hint = note(box, "One step per line:  key win+r  ·  wait 800  ·  type cmd", null);
+      apply.onclick = () => { try { const ns = textToSteps(ta.value, auto); if (!ns.length) throw new Error("no steps"); steps = ns; draw(); } catch (e) { hint.textContent = "Can't apply: " + e.message; hint.style.color = "var(--bad)"; } };
+      cancel.onclick = draw;
+    };
+    saveR.onclick = () => saveRecipe(steps, box);
+    if (runNow) run.click();
+  }
+}
+
+// ---- recipes (per target, in localStorage) ----
+function recipes() { try { return JSON.parse(store.get("hmi_recipes", "[]")) || []; } catch { return []; } }
+function setRecipes(a) { store.set("hmi_recipes", JSON.stringify(a)); }
+function saveRecipe(steps, nearBox) {
+  const wrap = document.createElement("div"); wrap.className = "ministep";
+  const inp = document.createElement("input"); inp.placeholder = "Recipe name"; inp.maxLength = 40; inp.style.flex = "1 1 120px";
+  const ok = btn("Save"), cancel = btn("Cancel", "alt");
+  wrap.append(inp, ok, cancel); nearBox.appendChild(wrap); inp.focus();
+  ok.onclick = () => {
+    const name = inp.value.trim(); if (!name) { inp.focus(); return; }
+    const a = recipes(); a.push({ name, target: $("target").value, steps }); setRecipes(a); renderRecipes();
+    wrap.remove(); note(nearBox, "Saved recipe “" + name + "” for " + $("target").value + ".", "var(--ok)"); $("recipebox").open = true;
+  };
+  cancel.onclick = () => wrap.remove();
+}
+function renderRecipes() {
+  const list = $("reclist"); if (!list) return; list.innerHTML = "";
+  const t = $("target").value, all = recipes();
+  const mine = all.map((r, i) => ({ r, i })).filter(x => x.r.target === t);
+  $("reccount").textContent = mine.length ? mine.length + " saved" : "";
+  if (!mine.length) { list.innerHTML = '<div class="note">No recipes for this target yet. Save one from a command Claude proposes.</div>'; return; }
+  mine.forEach(({ r, i }) => {
+    const row = document.createElement("div"); row.className = "recrow";
+    const nm = document.createElement("div"); nm.className = "rn"; nm.textContent = r.name;
+    const play = btn("▶"); play.title = "Load"; const del = btn("✕", "alt"); del.title = "Delete";
+    row.append(nm, play, del); list.appendChild(row);
+    play.onclick = () => { const d = msg("Recipe", r.name, "var(--ok)"); renderStepCard(d, r.steps.map(s => ({ ...s }))); $("recipebox").open = false; };
+    del.onclick = () => { const a = recipes(); a.splice(i, 1); setRecipes(a); renderRecipes(); };
+  });
+}
+// Built-in recipes, seeded once into this browser's saved recipes (never overwrites yours).
+// Enter is deliberately absent from every step: you tap Enter yourself. Terminal must already be open.
+const SEED_VER = "2026-10-22-sophia-mac";
+(function seedRecipes() {
+  if (store.get("hmi_seeded", "") === SEED_VER) return;
+  const a = recipes(), have = new Set(a.map(r => r.target + "|" + r.name));
+  [
+    { name: "Mac: install SSH key from Downloads", target: "mac", steps: [{ type: "mkdir -p ~/.ssh && chmod 700 ~/.ssh && cat ~/Downloads/claude_desktop_key.pub >> ~/.ssh/authorized_keys && chmod 600 ~/.ssh/authorized_keys" }] },
+    { name: "Mac: append SSH key line directly", target: "mac", steps: [{ type: "echo 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIN1VgQ2WvnPg2wTbXsJOmVhzbLppvZwEd/HaE6E+SdKC claude-desktop-m8kebh3' >> ~/.ssh/authorized_keys" }] },
+  ].forEach(r => { if (!have.has(r.target + "|" + r.name)) a.push(r); });
+  setRecipes(a); store.set("hmi_seeded", SEED_VER);
+})();
+renderRecipes();
+
+// ---- sending a chat turn (text and/or a screen photo) ----
+function msgImage(dataUrl, caption) {
+  $("empty").hidden = true;
+  const d = document.createElement("div"); d.className = "msg you";
+  const h = document.createElement("div"); h.className = "who"; h.textContent = "you";
+  const img = document.createElement("img"); img.src = dataUrl; d.append(h, img);
+  if (caption) { const c = document.createElement("div"); c.textContent = caption; c.style.marginTop = "6px"; d.appendChild(c); }
+  $("conv").appendChild(d); d.scrollIntoView({ block: "nearest" }); return d;
+}
+async function send(text, image) {
+  if (busy || (!text && !image)) return;
+  busy = true; $("ask").disabled = true;
+  if (image) msgImage(image, text); else msg("you", text);
+  try { proposal(parseReply(await askClaude(text, image), auto)); }
+  catch (e) { msg("error", e.message, "var(--bad)"); }
+  busy = false; $("ask").disabled = false;
+}
+function submit() { const v = $("goal").value.trim(); if (!v) return; $("goal").value = ""; send(v, null); }
+$("ask").onclick = submit;
+$("newchat").onclick = clearChat;
+$("goal").addEventListener("keydown", e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); submit(); } });
+
+// ---- camera: shrink the photo, then send it to Claude in the thread ----
+$("cam").onclick = () => $("camfile").click();
+$("camfile").onchange = async () => {
+  const f = $("camfile").files[0]; $("camfile").value = ""; if (!f) return;
+  try { const img = await shrinkImage(f); const cap = $("goal").value.trim(); $("goal").value = ""; await send(cap, img); }
+  catch (e) { bnote("Photo: " + e.message, true); }
+};
+function shrinkImage(file, max = 1024, quality = 0.7) {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file), im = new Image();
+    im.onload = () => {
+      const scale = Math.min(1, max / Math.max(im.width, im.height));
+      const c = document.createElement("canvas"); c.width = Math.round(im.width * scale); c.height = Math.round(im.height * scale);
+      c.getContext("2d").drawImage(im, 0, 0, c.width, c.height);
+      URL.revokeObjectURL(url); resolve(c.toDataURL("image/jpeg", quality));
+    };
+    im.onerror = () => { URL.revokeObjectURL(url); reject(new Error("couldn't read that image")); };
+    im.src = url;
+  });
+}
+
+// ---- voice: the browser's own speech recognition, if the browser has one ----
+(function () {
+  const mic = $("mic"), goal = $("goal");
+  const isIOS = /iP(hone|od|ad)/.test(navigator.userAgent) || (/Mac/.test(navigator.platform) && navigator.maxTouchPoints > 1);
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  // iOS WKWebView (Bluefy) exposes webkitSpeechRecognition but it fails silently.
+  // The reliable voice path on iPhone is the keyboard's own dictation — the same
+  // on-device engine as Siri — so there the mic just opens the field and asks for it.
+  if (isIOS || !SR) {
+    mic.title = "Dictate";
+    mic.addEventListener("click", () => { goal.focus(); bnote("Tap the 🎤 on the keyboard, speak your command, then tap Ask Claude."); });
+    return;
+  }
+  // Elsewhere (Chrome, Android) real Web Speech works: hold the button to talk.
+  let rec = null;
+  const stop = () => { try { rec && rec.stop(); } catch {} };
+  const start = () => {
+    rec = new SR(); rec.lang = "en-US"; rec.interimResults = false;
+    rec.onresult = e => { goal.value = Array.from(e.results).map(r => r[0].transcript).join(" ").trim(); };
+    rec.onend = () => { mic.style.background = ""; mic.style.color = ""; if (goal.value.trim()) submit(); };
+    rec.onerror = e => bnote("Mic: " + e.error, true);
+    mic.style.background = "var(--bad)"; mic.style.color = "#fff"; try { rec.start(); } catch (e) { bnote("Mic: " + e.message, true); }
+  };
+  mic.addEventListener("pointerdown", start); mic.addEventListener("pointerup", stop); mic.addEventListener("pointerleave", stop);
+})();
+</script>
+</body>
+</html>
